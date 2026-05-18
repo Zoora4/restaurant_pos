@@ -8,6 +8,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mailer/mailer.dart';
 import 'package:mailer/smtp_server/gmail.dart';
 
+// hallo
 // ─────────────────────────────────────────────
 // ENTRY POINT
 // ─────────────────────────────────────────────
@@ -468,7 +469,7 @@ class AppState extends ChangeNotifier {
     currentUser    = owner;
     currentEmployee = employee;
     restaurantName = owner.name;
-    selectedNav    = 0;
+    selectedNav    = 1;
     refreshData();
     notifyListeners();
   }
@@ -536,8 +537,7 @@ class AppState extends ChangeNotifier {
     await refreshData();
   }
 
-
-  Future<void> deleteExpense(String id) async {
+    Future<void> deleteExpense(String id) async {
     await _supabase.from('expenses').delete().eq('id', id);
     await refreshData();
   }
@@ -1363,6 +1363,14 @@ class SideNavBar extends StatelessWidget {
           child: Column(children: [
             if (!state.isEmployee) _sideBtn(context, Icons.help_outline, 'Help Center', () {}),
             if (!state.isEmployee) const SizedBox(height: 4),
+            _sideBtn(                                          // ← add this
+              context,
+              state.isDark ? Icons.light_mode : Icons.dark_mode,
+              state.isDark ? 'Light Mode' : 'Dark Mode',
+              state.toggleTheme,
+              color: AppColors.primary,
+            ),
+            const SizedBox(height: 4), 
             _sideBtn(context, Icons.logout, 'Logout', () => state.logout(), color: Colors.red),
           ]),
         ),
@@ -1711,34 +1719,42 @@ class DashboardPage extends StatelessWidget {
             onPressed: state.toggleTheme,
           ),
         ]),
-        const SizedBox(height: 20),
+        const SizedBox(height: 15),
         LayoutBuilder(builder: (context, c) {
-          final cols = c.maxWidth > 500 ? 3 : 1;
-          return GridView.count(
-            crossAxisCount: cols, shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            crossAxisSpacing: 12, mainAxisSpacing: 12,
-            childAspectRatio: cols == 1 ? 3.2 : 1.5,
-            children: [
+          final isMobile = c.maxWidth <= 500;
+          if (isMobile) {
+            return Column(children: [
               _StatCard(title: 'Gross Sales',    value: '₱${state.grossSales.toStringAsFixed(2)}',    subtitle: 'Total before expenses',  icon: Icons.trending_up,            color: AppColors.primary, ext: ext),
+              const SizedBox(height: 10),
               _StatCard(title: 'Total Expenses', value: '₱${state.totalExpenses.toStringAsFixed(2)}', subtitle: 'All recorded expenses',   icon: Icons.receipt,                color: AppColors.accent,  ext: ext),
+              const SizedBox(height: 10),
               _StatCard(title: 'Net Pay',        value: '₱${state.netPay.toStringAsFixed(2)}',        subtitle: 'Gross minus expenses',    icon: Icons.account_balance_wallet, color: AppColors.success, ext: ext),
+            ]);
+          }
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start, // ← key fix
+            children: [
+              Expanded(child: _StatCard(title: 'Gross Sales',    value: '₱${state.grossSales.toStringAsFixed(2)}',    subtitle: 'Total before expenses',  icon: Icons.trending_up,            color: AppColors.primary, ext: ext)),
+              const SizedBox(width: 10),
+              Expanded(child: _StatCard(title: 'Total Expenses', value: '₱${state.totalExpenses.toStringAsFixed(2)}', subtitle: 'All recorded expenses',   icon: Icons.receipt,                color: AppColors.accent,  ext: ext)),
+              const SizedBox(width: 10),
+              Expanded(child: _StatCard(title: 'Net Pay',        value: '₱${state.netPay.toStringAsFixed(2)}',        subtitle: 'Gross minus expenses',    icon: Icons.account_balance_wallet, color: AppColors.success, ext: ext)),
             ],
           );
         }),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         LayoutBuilder(builder: (context, c) {
           final isW = c.maxWidth > 600;
           if (isW) {
             return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Expanded(child: _OrderSummary(state: state, ext: ext)),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               Expanded(child: _RecentExpenses(state: state, ext: ext)),
             ]);
           }
           return Column(children: [
             _OrderSummary(state: state, ext: ext),
-            const SizedBox(height: 12),
+            const SizedBox(height: 10),
             _RecentExpenses(state: state, ext: ext),
           ]);
         }),
@@ -1760,7 +1776,7 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 150),
       decoration: BoxDecoration(
         color: ext.card,
         borderRadius: BorderRadius.circular(16),
@@ -1768,7 +1784,7 @@ class _StatCard extends StatelessWidget {
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min, // ← don't stretch vertically
         children: [
           Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
             Flexible(
@@ -1776,22 +1792,13 @@ class _StatCard extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Container(
-              width: 30, height: 30,
-              decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, size: 15, color: color),
+              width: 28, height: 28,
+              decoration: BoxDecoration(color: color.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, size: 14, color: color),
             ),
           ]),
           const SizedBox(height: 6),
-          LayoutBuilder(
-            builder: (context, constraints) => SizedBox(
-              width: constraints.maxWidth,
-              child: FittedBox(
-                fit: BoxFit.scaleDown,
-                alignment: Alignment.centerLeft,
-                child: Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700, color: color), maxLines: 1),
-              ),
-            ),
-          ),
+          Text(value, style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: color), overflow: TextOverflow.ellipsis, maxLines: 1),
           const SizedBox(height: 2),
           Text(subtitle, style: TextStyle(fontSize: 10, color: ext.textSecondary), overflow: TextOverflow.ellipsis, maxLines: 1),
         ],
@@ -1818,7 +1825,7 @@ class _OrderSummary extends StatelessWidget {
         Text('Order Summary', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: ext.textPrimary)),
         const SizedBox(height: 12),
         _row('Dine In',     state.dineIn.length.toString(),   AppColors.primary),
-        _row('Wait List',   state.waitList.length.toString(),  AppColors.warning),
+        _row('Queue',   state.waitList.length.toString(),  AppColors.warning),
         _row('Served',      state.served.length.toString(),    AppColors.success),
         _row('Total Valid', state.orders.where((o) => o.status != 'draft').length.toString(), AppColors.accent),
       ]),
@@ -2088,6 +2095,24 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
   }
 
   void _showPaymentDialog(BuildContext context, Order order, AppState state) {
+    // ── Capture & normalize BEFORE anything async changes it ──
+    final capturedPayment = state.selectedPayment.trim().toLowerCase();
+    String paymentLabel;
+    switch (capturedPayment) {
+      case 'card': paymentLabel = 'Card'; break;
+      case 'scan': paymentLabel = 'Scan'; break;
+      default:     paymentLabel = 'Cash'; break;
+    }
+
+    // ── Non-cash: skip change dialog ──
+    if (capturedPayment != 'cash') {
+      state.placeOrder().then((_) {
+        if (context.mounted) _showReceiptDialog(context, order, state, paymentMethod: paymentLabel);
+      });
+      return;
+    }
+
+    // ── Cash only ────────────────────────────────────────────
     final amtCtrl = TextEditingController();
     double? change;
     String? errorMsg;
@@ -2169,10 +2194,14 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
             ),
             onPressed: change != null ? () async {
               Navigator.pop(dialogCtx);
-              final capturedChange = change!;
-              final capturedAmount = double.parse(amtCtrl.text);
+              final capturedChange  = change!;
+              final capturedAmount  = double.parse(amtCtrl.text);
               await state.placeOrder();
-              if (context.mounted) _showReceiptDialog(context, order, state, amountPaid: capturedAmount, change: capturedChange);
+              if (context.mounted) _showReceiptDialog(context, order, state,
+                amountPaid: capturedAmount,
+                change: capturedChange,
+                paymentMethod: 'Cash',
+              );
             } : null,
             child: const Text('Place Order', style: TextStyle(color: Colors.white, fontSize: 12)),
           ),
@@ -2181,7 +2210,7 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
     );
   }
 
-  void _showReceiptDialog(BuildContext context, Order order, AppState state, {double amountPaid = 0, double change = 0}) {
+  void _showReceiptDialog(BuildContext context, Order order, AppState state, {double amountPaid = 0, double change = 0, String paymentMethod = 'Cash'}) {
     final now = DateTime.now();
     final ext = context.ext;
     showDialog(
@@ -2204,7 +2233,7 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
                 _receiptRow('Order Type', order.orderType, ext),
                 if (order.orderType == 'Dine In') _receiptRow('Table', order.tableNo, ext),
                 _receiptRow('Date', '${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}', ext),
-                _receiptRow('Payment', 'Cash', ext),
+                _receiptRow('Payment', paymentMethod, ext), // ← dynamic
                 Divider(color: ext.border),
                 Align(alignment: Alignment.centerLeft, child: Text('Items', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: ext.textSecondary))),
                 const SizedBox(height: 6),
@@ -2228,8 +2257,11 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
                   Flexible(child: Text('₱${order.total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w800, color: AppColors.primary), overflow: TextOverflow.ellipsis)),
                 ]),
                 Divider(color: ext.border),
-                _receiptRow('Amount Paid', '₱${amountPaid.toStringAsFixed(2)}', ext),
-                _receiptRow('Change', '₱${change.toStringAsFixed(2)}', ext),
+                // ── only show for cash ──
+                if (paymentMethod == 'Cash') ...[
+                  _receiptRow('Amount Paid', '₱${amountPaid.toStringAsFixed(2)}', ext),
+                  _receiptRow('Change', '₱${change.toStringAsFixed(2)}', ext),
+                ],
                 const SizedBox(height: 12),
                 Container(
                   width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 8),
@@ -2276,13 +2308,13 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
 
   @override
   Widget build(BuildContext context) {
-    final ext        = context.ext;
-    final order      = widget.state.activeOrder;
-    final subtotal   = order?.subtotal ?? 0;
-    final tax        = order?.tax ?? 0.0;
+    final ext         = context.ext;
+    final order       = widget.state.activeOrder;
+    final subtotal    = order?.subtotal ?? 0;
+    final tax         = order?.tax ?? 0.0;
     final otherCharge = order?.otherChargeAmount ?? 0.0;
-    final total      = subtotal + tax + otherCharge;
-    final itemCount  = order?.items.fold(0, (s, i) => s + i.quantity) ?? 0;
+    final total       = subtotal + tax + otherCharge;
+    final itemCount   = order?.items.fold(0, (s, i) => s + i.quantity) ?? 0;
 
     final screenHeight = MediaQuery.of(context).size.height;
     final maxExpanded  = (screenHeight * 0.60).clamp(280.0, 440.0);
@@ -2298,6 +2330,7 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // ── collapsed bar ───────────────────────────────────────
           GestureDetector(
             onTap: () => setState(() => _expanded = !_expanded),
             behavior: HitTestBehavior.opaque,
@@ -2334,6 +2367,8 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
               ]),
             ),
           ),
+
+          // ── expanded content ────────────────────────────────────
           if (_expanded)
             Flexible(
               child: SingleChildScrollView(
@@ -2366,6 +2401,19 @@ class _OrderSidePanelMobileSheetState extends State<_OrderSidePanelMobileSheet> 
                       )),
                     ]),
                     const SizedBox(height: 10),
+
+                    // ── payment method ──────────────────────────────
+                    Text('Payment Method', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ext.textPrimary)),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      _PayBtn('Cash', Icons.money,            widget.state.selectedPayment == 'cash', () => widget.state.setPayment('cash')),
+                      const SizedBox(width: 8),
+                      _PayBtn('Card', Icons.credit_card,      widget.state.selectedPayment == 'card', () => widget.state.setPayment('card')),
+                      const SizedBox(width: 8),
+                      _PayBtn('Scan', Icons.qr_code_scanner,  widget.state.selectedPayment == 'scan', () => widget.state.setPayment('scan')),
+                    ]),
+                    const SizedBox(height: 10),
+
                     if (order != null && order.items.isNotEmpty) ...[
                       Divider(color: ext.border),
                       ...order.items.map((oi) => Padding(
@@ -2452,7 +2500,7 @@ class _OrderTabs extends StatelessWidget {
     final tabs = [
       ('New Order', state.activeOrder?.items.length ?? 0, const Color(0xFF6366F1)),
       ('Dine In',   state.dineIn.length,                  AppColors.primary),
-      ('Wait List', state.waitList.length,                 AppColors.warning),
+      ('Queue', state.waitList.length,                 AppColors.warning),
       ('Take Out',  state.takeAway.length,                 AppColors.accent),
       ('Served',    state.served.length,                   AppColors.success),
     ];
@@ -2505,7 +2553,7 @@ class _OrderListSection extends StatelessWidget {
     List<Order> filtered;
     if (tab == 'Dine In')        filtered = state.dineIn;
     else if (tab == 'Take Out')  filtered = state.takeAway;
-    else if (tab == 'Wait List') filtered = state.waitList;
+    else if (tab == 'Queue') filtered = state.waitList;
     else if (tab == 'Served')    filtered = state.served;
     else filtered = [];
 
@@ -2576,7 +2624,7 @@ class _OrderListSection extends StatelessWidget {
                   Expanded(child: OutlinedButton(
                     style: OutlinedButton.styleFrom(foregroundColor: AppColors.warning, side: const BorderSide(color: AppColors.warning), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)), padding: const EdgeInsets.symmetric(vertical: 6)),
                     onPressed: () => state.updateOrderStatus(order, 'wait_list'),
-                    child: const FittedBox(child: Text('Wait List', style: TextStyle(fontSize: 11))),
+                    child: const FittedBox(child: Text('Queue', style: TextStyle(fontSize: 11))),
                   ))
                 else if (order.status == 'wait_list')
                   Expanded(child: OutlinedButton(
@@ -2739,6 +2787,28 @@ class _OrderSidePanel extends StatelessWidget {
   }
 
   void _showPaymentDialog(BuildContext context, Order order) {
+    // ── Capture & normalize BEFORE anything async changes it ──
+    final capturedPayment = state.selectedPayment.trim().toLowerCase();
+
+    // Map to display label
+    String paymentLabel;
+    switch (capturedPayment) {
+      case 'card': paymentLabel = 'Card'; break;
+      case 'scan': paymentLabel = 'Scan'; break;
+      default:     paymentLabel = 'Cash'; break;
+    }
+
+    // ── Non-cash: skip change dialog, place order directly ──
+    if (capturedPayment != 'cash') {
+      state.placeOrder().then((_) {
+        if (context.mounted) _showReceiptDialog(context, order,
+          paymentMethod: paymentLabel,
+        );
+      });
+      return;
+    }
+
+    // ── Cash only from here down ─────────────────────────────
     final amtCtrl = TextEditingController();
     double? change;
     String? errorMsg;
@@ -2823,7 +2893,11 @@ class _OrderSidePanel extends StatelessWidget {
               final capturedChange = change!;
               final capturedAmount = double.parse(amtCtrl.text);
               await state.placeOrder();
-              if (context.mounted) _showReceiptDialog(context, order, amountPaid: capturedAmount, change: capturedChange);
+              if (context.mounted) _showReceiptDialog(context, order,
+                amountPaid: capturedAmount,
+                change: capturedChange,
+                paymentMethod: 'Cash',
+              );
             } : null,
             child: const Text('Confirm & Place Order', style: TextStyle(color: Colors.white, fontSize: 13)),
           ),
@@ -2832,7 +2906,7 @@ class _OrderSidePanel extends StatelessWidget {
     );
   }
 
-  void _showReceiptDialog(BuildContext context, Order order, {double amountPaid = 0, double change = 0}) {
+  void _showReceiptDialog(BuildContext context, Order order, {double amountPaid = 0, double change = 0, String paymentMethod = 'Cash'}) {
     final now = DateTime.now();
     final ext = context.ext;
     showDialog(
@@ -2856,7 +2930,7 @@ class _OrderSidePanel extends StatelessWidget {
                 if (order.orderType == 'Dine In') _receiptRow('Table', order.tableNo, ext),
                 _receiptRow('Date', '${now.year}-${now.month.toString().padLeft(2,'0')}-${now.day.toString().padLeft(2,'0')}', ext),
                 _receiptRow('Time', '${now.hour.toString().padLeft(2,'0')}:${now.minute.toString().padLeft(2,'0')}', ext),
-                _receiptRow('Payment', 'Cash', ext),
+                _receiptRow('Payment', paymentMethod, ext),  // ← dynamic
                 Divider(color: ext.border),
                 Align(alignment: Alignment.centerLeft, child: Text('Items', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: ext.textSecondary))),
                 const SizedBox(height: 8),
@@ -2881,8 +2955,11 @@ class _OrderSidePanel extends StatelessWidget {
                 ]),
                 const SizedBox(height: 6),
                 Divider(color: ext.border),
-                _receiptRow('Amount Paid', '₱${amountPaid.toStringAsFixed(2)}', ext),
-                _receiptRow('Change', '₱${change.toStringAsFixed(2)}', ext),
+                // ── only show for cash ──────────────────────────
+                if (paymentMethod == 'Cash') ...[
+                  _receiptRow('Amount Paid', '₱${amountPaid.toStringAsFixed(2)}', ext),
+                  _receiptRow('Change', '₱${change.toStringAsFixed(2)}', ext),
+                ],
                 const SizedBox(height: 16),
                 Container(
                   width: double.infinity, padding: const EdgeInsets.symmetric(vertical: 10),
@@ -2921,102 +2998,149 @@ class _OrderSidePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final ext          = context.ext;
-    final order        = state.activeOrder;
-    final subtotal     = order?.subtotal ?? 0;
-    final tax          = order?.tax ?? 0.0;
-    final otherCharge  = order?.otherChargeAmount ?? 0.0;
+    final ext             = context.ext;
+    final order           = state.activeOrder;
+    final subtotal        = order?.subtotal ?? 0;
+    final tax             = order?.tax ?? 0.0;
+    final otherCharge     = order?.otherChargeAmount ?? 0.0;
     final otherChargeName = order?.otherChargeName ?? '';
-    final total        = subtotal + tax + otherCharge;
+    final total           = subtotal + tax + otherCharge;
 
     return SizedBox(
       width: 280,
       child: Container(
-        decoration: BoxDecoration(color: ext.card, border: Border(left: BorderSide(color: ext.border))),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (order != null) ...[
-            Padding(
-              padding: const EdgeInsets.all(14),
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                GestureDetector(
-                  onTap: () => _showEditTableDialog(context),
-                  child: Row(children: [
-                    Expanded(child: Text('Table #${order.tableNo}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: ext.textPrimary, decoration: TextDecoration.underline), overflow: TextOverflow.ellipsis)),
+        decoration: BoxDecoration(
+          color: ext.card,
+          border: Border(left: BorderSide(color: ext.border)),
+        ),
+        // ── SingleChildScrollView prevents all overflow ──
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+
+              // ── header ─────────────────────────────────────────────
+              if (order != null) ...[
+                Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    GestureDetector(
+                      onTap: () => _showEditTableDialog(context),
+                      child: Row(children: [
+                        Expanded(child: Text('Table #${order.tableNo}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: ext.textPrimary, decoration: TextDecoration.underline), overflow: TextOverflow.ellipsis)),
+                      ]),
+                    ),
+                    Text('Order #${order.id.length >= 4 ? order.id.substring(order.id.length - 4) : order.id}', style: TextStyle(fontSize: 11, color: ext.textSecondary)),
+                    const SizedBox(height: 8),
+                    Row(children: [
+                      Expanded(child: _OrderTypeBtn('Dine In',  order.orderType == 'Dine In',  () => state.updateActiveOrderType('Dine In'))),
+                      const SizedBox(width: 6),
+                      Expanded(child: _OrderTypeBtn('Take Out', order.orderType == 'Take Out', () => state.updateActiveOrderType('Take Out'))),
+                    ]),
                   ]),
                 ),
-                Text('Order #${order.id.length >= 4 ? order.id.substring(order.id.length - 4) : order.id}', style: TextStyle(fontSize: 11, color: ext.textSecondary)),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(child: _OrderTypeBtn('Dine In',  order.orderType == 'Dine In',  () => state.updateActiveOrderType('Dine In'))),
-                  const SizedBox(width: 6),
-                  Expanded(child: _OrderTypeBtn('Take Out', order.orderType == 'Take Out', () => state.updateActiveOrderType('Take Out'))),
+                Divider(color: ext.border, height: 1),
+              ] else ...[
+                Padding(padding: const EdgeInsets.all(14), child: Text('No active order', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ext.textSecondary))),
+                Divider(color: ext.border, height: 1),
+              ],
+
+              // ── items label ─────────────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
+                child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Text('Ordered Items', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ext.textPrimary)),
+                  Text('${order?.items.length ?? 0}', style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
                 ]),
-              ]),
-            ),
-            Divider(color: ext.border, height: 1),
-          ] else ...[
-            Padding(padding: const EdgeInsets.all(14), child: Text('No active order', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ext.textSecondary))),
-            Divider(color: ext.border, height: 1),
-          ],
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 10, 14, 4),
-            child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-              Text('Ordered Items', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ext.textPrimary)),
-              Text('${order?.items.length ?? 0}', style: const TextStyle(fontSize: 12, color: AppColors.primary, fontWeight: FontWeight.w600)),
-            ]),
-          ),
-          if (order != null && order.items.isNotEmpty)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 160),
-              child: ListView(
-                shrinkWrap: true,
-                children: order.items.map((oi) => _OrderItemRow(oi: oi, ext: ext, state: state)).toList(),
               ),
-            )
-          else
-            Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('No items in order', style: TextStyle(color: ext.textSecondary, fontSize: 12)))),
-          Divider(color: ext.border),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            child: Column(children: [
-              _sumRow('Subtotal', '₱${subtotal.toStringAsFixed(2)}', ext),
-              GestureDetector(onTap: () => _showTaxEditDialog(context), child: _sumRow('Tax (tap to edit)', '₱${tax.toStringAsFixed(2)}', ext, isInteractive: true)),
-              GestureDetector(onTap: () => _showOtherChargeDialog(context), child: _sumRow(otherChargeName.isEmpty ? 'Other (tap to add)' : otherChargeName, '₱${otherCharge.toStringAsFixed(2)}', ext, isInteractive: true)),
-              const SizedBox(height: 6),
-              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                Text('Total', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: ext.textPrimary)),
-                Flexible(child: Text('₱${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.primary), overflow: TextOverflow.ellipsis)),
-              ]),
-            ]),
-          ),
-          Divider(color: ext.border),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Payment', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ext.textPrimary)),
-              const SizedBox(height: 8),
-              Row(children: [
-                _PayBtn('Cash', Icons.money, state.selectedPayment == 'cash', () => state.setPayment('cash')),
-              ]),
-            ]),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-            child: SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: order != null && order.items.isNotEmpty ? () => _showPaymentDialog(context, order) : null,
-                icon: const Icon(Icons.check_circle_outline, size: 16, color: Colors.white),
-                label: const Text('Place Order', style: TextStyle(fontSize: 13, color: Colors.white)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
+
+              // ── items list ──────────────────────────────────────────
+              if (order != null && order.items.isNotEmpty)
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxHeight: 200),
+                  child: ListView(
+                    shrinkWrap: true,
+                    physics: const ClampingScrollPhysics(),
+                    children: order.items.map((oi) => _OrderItemRow(oi: oi, ext: ext, state: state)).toList(),
+                  ),
+                )
+              else
+                Padding(padding: const EdgeInsets.all(16), child: Center(child: Text('No items in order', style: TextStyle(color: ext.textSecondary, fontSize: 12)))),
+
+              // ── totals ──────────────────────────────────────────────
+              Divider(color: ext.border),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                child: Column(children: [
+                  _sumRow('Subtotal', '₱${subtotal.toStringAsFixed(2)}', ext),
+                  GestureDetector(onTap: () => _showTaxEditDialog(context), child: _sumRow('Tax (tap to edit)', '₱${tax.toStringAsFixed(2)}', ext, isInteractive: true)),
+                  GestureDetector(onTap: () => _showOtherChargeDialog(context), child: _sumRow(otherChargeName.isEmpty ? 'Other (tap to add)' : otherChargeName, '₱${otherCharge.toStringAsFixed(2)}', ext, isInteractive: true)),
+                  const SizedBox(height: 6),
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    Text('Total', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: ext.textPrimary)),
+                    Flexible(child: Text('₱${total.toStringAsFixed(2)}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.primary), overflow: TextOverflow.ellipsis)),
+                  ]),
+                ]),
               ),
-            ),
+
+              // ── payment method ──────────────────────────────────────
+              Divider(color: ext.border),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Payment Method', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: ext.textPrimary)),
+                  const SizedBox(height: 8),
+                  Row(children: [
+                    _PayBtn('Cash', Icons.money,             state.selectedPayment == 'cash', () => state.setPayment('cash')),
+                    const SizedBox(width: 6),
+                    _PayBtn('Card', Icons.credit_card,       state.selectedPayment == 'card', () => state.setPayment('card')),
+                    const SizedBox(width: 6),
+                    _PayBtn('Scan', Icons.qr_code_scanner,   state.selectedPayment == 'scan', () => state.setPayment('scan')),
+                  ]),
+                ]),
+              ),
+
+              // ── print + place order ─────────────────────────────────
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                child: Row(children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: order != null && order.items.isNotEmpty
+                          ? () { /* your print logic here */ }
+                          : null,
+                      icon: const Icon(Icons.print_outlined, size: 16),
+                      label: const Text('Print', style: TextStyle(fontSize: 13)),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: ext.border),
+                        foregroundColor: ext.textPrimary,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: order != null && order.items.isNotEmpty
+                          ? () => _showPaymentDialog(context, order)
+                          : null,
+                      icon: const Icon(Icons.check_circle_outline, size: 16, color: Colors.white),
+                      label: const Text('Place Order', style: TextStyle(fontSize: 13, color: Colors.white)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ),
+                ]),
+              ),
+
+            ],
           ),
-        ]),
+        ),
       ),
     );
   }
@@ -3146,6 +3270,88 @@ class _ManageTablePageState extends State<ManageTablePage> {
     ));
   }
 
+  // New Method: Show Edit/Delete Dialog
+  void _showEditTableDialog(TableInfo table, int index) {
+    final seatsCtrl = TextEditingController(text: table.seats.toString());
+    // Initialize local state for the dropdown
+    String currentStatus = table.status;
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: dialogCtx.ext.card,
+          title: Text('Edit Table ${table.number}', style: TextStyle(color: dialogCtx.ext.textPrimary)),
+          content: SizedBox(
+            width: 260,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Seats Input
+                Text('Seats', style: TextStyle(color: dialogCtx.ext.textSecondary, fontSize: 13)),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: seatsCtrl,
+                  keyboardType: TextInputType.number,
+                  style: TextStyle(color: dialogCtx.ext.textPrimary),
+                  decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                ),
+                const SizedBox(height: 16),
+                
+                // Status Dropdown
+                Text('Status', style: TextStyle(color: dialogCtx.ext.textSecondary, fontSize: 13)),
+                const SizedBox(height: 8),
+                DropdownButtonFormField<String>(
+                  value: currentStatus,
+                  dropdownColor: dialogCtx.ext.card,
+                  style: TextStyle(color: dialogCtx.ext.textPrimary),
+                  decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(8))),
+                  items: const [
+                    DropdownMenuItem(value: 'available', child: Text('Available')),
+                    DropdownMenuItem(value: 'occupied', child: Text('Occupied')),
+                    DropdownMenuItem(value: 'reserved', child: Text('Reserved')),
+                  ],
+                  onChanged: (val) {
+                    if (val != null) {
+                      setDialogState(() => currentStatus = val);
+                    }
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text('Cancel', style: TextStyle(color: dialogCtx.ext.textSecondary)),
+            ),
+            TextButton(
+              onPressed: () {
+                // Delete Logic
+                setState(() => widget.state.tables.removeAt(index));
+                Navigator.pop(dialogCtx);
+              },
+              child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              onPressed: () {
+                // Save Logic
+                final seats = int.tryParse(seatsCtrl.text) ?? table.seats;
+                setState(() {
+                  table.seats = seats;
+                  table.status = currentStatus;
+                });
+                Navigator.pop(dialogCtx);
+              },
+              child: const Text('Save', style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final ext = context.ext;
@@ -3193,10 +3399,17 @@ class _ManageTablePageState extends State<ManageTablePage> {
                         : t.status == 'occupied' ? AppColors.accent
                         : AppColors.warning;
                     return GestureDetector(
+                      // Existing Tap: Cycle Status
                       onTap: () {
                         final statuses = ['available', 'occupied', 'reserved'];
                         final next = statuses[(statuses.indexOf(t.status) + 1) % 3];
                         setState(() => t.status = next);
+                      },
+                      // New Long Press: Edit Table
+                      onLongPress: () {
+                         if (!widget.state.isEmployee) {
+                           _showEditTableDialog(t, i);
+                         }
                       },
                       child: Container(
                         decoration: BoxDecoration(
@@ -3521,10 +3734,7 @@ class _ManageDishesPageState extends State<ManageDishesPage> {
 //      shadowing Flutter's built-in showDatePicker, which was the primary
 //      cause of the Android crash when navigating to the Employees tab
 //      (the name collision broke the widget tree resolution on Android).
-// ────────────────────────────────────────
-// Make sure to import your AppState file here
-// import 'path/to/your/app_state.dart'; 
-
+// ─────────────────────────────────────────────
 class ExpensesPage extends StatefulWidget {
   final AppState state;
   const ExpensesPage({super.key, required this.state});
