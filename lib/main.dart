@@ -536,6 +536,24 @@ class AppState extends ChangeNotifier {
     await refreshData();
   }
 
+
+  Future<void> deleteExpense(String id) async {
+    await _supabase.from('expenses').delete().eq('id', id);
+    await refreshData();
+  }
+
+  Future<void> updateExpense(Expense e) async {
+    await _supabase.from('expenses').update({
+      'user_id': _ownerId,
+      'name': e.name,
+      'amount': e.amount,
+      'category': e.category,
+      'description': e.description,
+      'date': e.date.toIso8601String().split('T')[0],
+    }).eq('id', e.id);
+    await refreshData();
+  }
+
   Future<void> addTable(TableInfo t) async {
     await _supabase.from('restaurant_tables').insert({
       'user_id': _ownerId, 'number': t.number, 'seats': t.seats, 'status': t.status,
@@ -3503,10 +3521,14 @@ class _ManageDishesPageState extends State<ManageDishesPage> {
 //      shadowing Flutter's built-in showDatePicker, which was the primary
 //      cause of the Android crash when navigating to the Employees tab
 //      (the name collision broke the widget tree resolution on Android).
-// ─────────────────────────────────────────────
+// ────────────────────────────────────────
+// Make sure to import your AppState file here
+// import 'path/to/your/app_state.dart'; 
+
 class ExpensesPage extends StatefulWidget {
   final AppState state;
   const ExpensesPage({super.key, required this.state});
+
   @override
   State<ExpensesPage> createState() => _ExpensesPageState();
 }
@@ -3516,85 +3538,158 @@ class _ExpensesPageState extends State<ExpensesPage> with SingleTickerProviderSt
   static const _tabs = ['Utilities', 'Ingredients', 'Personal', 'Employee'];
 
   @override
-  void initState() { super.initState(); _tabCtrl = TabController(length: _tabs.length, vsync: this); }
-  @override
-  void dispose() { _tabCtrl.dispose(); super.dispose(); }
-
-  void _showAddExpense(String defaultCat) {
-    final nameCtrl = TextEditingController();
-    final amtCtrl  = TextEditingController();
-    final descCtrl = TextEditingController();
-    String cat    = defaultCat;
-    DateTime date = DateTime.now();
-    showDialog(context: context, builder: (dialogCtx) => StatefulBuilder(builder: (dialogCtx, setSt) => AlertDialog(
-      backgroundColor: dialogCtx.ext.card,
-      title: Text('Add Expense', style: TextStyle(color: dialogCtx.ext.textPrimary, fontSize: 15, fontWeight: FontWeight.w700)),
-      content: SizedBox(width: 300, child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        _dlgField('Name', nameCtrl, dialogCtx),
-        const SizedBox(height: 10),
-        _dlgField('Amount (₱)', amtCtrl, dialogCtx, type: TextInputType.number),
-        const SizedBox(height: 10),
-        _dlgField('Description', descCtrl, dialogCtx),
-        const SizedBox(height: 10),
-        DropdownButtonFormField<String>(
-          value: cat,
-          dropdownColor: dialogCtx.ext.card,
-          style: TextStyle(color: dialogCtx.ext.textPrimary, fontSize: 13),
-          decoration: InputDecoration(
-            labelText: 'Category',
-            labelStyle: TextStyle(color: dialogCtx.ext.textSecondary),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          ),
-          items: _tabs.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
-          onChanged: (v) => setSt(() => cat = v!),
-        ),
-        const SizedBox(height: 10),
-        GestureDetector(
-          // FIX: Use renamed _showAppDatePicker to avoid name collision with
-          //      Flutter's built-in showDatePicker which was crashing Android.
-          onTap: () async {
-            final picked = await _showAppDatePicker(
-              buildContext: dialogCtx,
-              initialDate: date,
-              firstDate: DateTime(2020),
-              lastDate: DateTime(2030),
-            );
-            if (picked != null) setSt(() => date = picked);
-          },
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(border: Border.all(color: dialogCtx.ext.border), borderRadius: BorderRadius.circular(8)),
-            child: Row(children: [
-              const Icon(Icons.calendar_today, size: 14, color: AppColors.primary),
-              const SizedBox(width: 8),
-              Flexible(child: Text('${date.year}-${date.month.toString().padLeft(2,'0')}-${date.day.toString().padLeft(2,'0')}', style: TextStyle(fontSize: 13, color: dialogCtx.ext.textPrimary))),
-            ]),
-          ),
-        ),
-      ]))),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
-        ElevatedButton(
-          style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-          onPressed: () {
-            final name = nameCtrl.text.trim();
-            final amt  = double.tryParse(amtCtrl.text) ?? 0;
-            if (name.isEmpty || amt <= 0) return;
-            widget.state.addExpense(Expense(id: '', name: name, amount: amt, description: descCtrl.text.trim(), category: cat, date: date));
-            setState(() {});
-            Navigator.pop(dialogCtx);
-          },
-          child: const Text('Add', style: TextStyle(color: Colors.white)),
-        ),
-      ],
-    )));
+  void initState() {
+    super.initState();
+    _tabCtrl = TabController(length: _tabs.length, vsync: this);
   }
 
-  Widget _dlgField(String label, TextEditingController ctrl, BuildContext ctx, {TextInputType? type}) =>
-      TextField(
-        controller: ctrl, keyboardType: type,
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
+  }
+
+  // Unified Dialog for Add and Edit
+  void _showExpenseDialog({Expense? expense}) {
+    // If expense is provided, we are in 'Edit' mode, otherwise 'Add' mode
+    final defaultCat = expense?.category ?? _tabs[_tabCtrl.index];
+
+    final nameCtrl = TextEditingController(text: expense?.name ?? '');
+    final amtCtrl = TextEditingController(text: expense != null ? expense.amount.toString() : '');
+    final descCtrl = TextEditingController(text: expense?.description ?? '');
+
+    String cat = defaultCat;
+    DateTime date = expense?.date ?? DateTime.now();
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, setSt) => AlertDialog(
+          backgroundColor: dialogCtx.ext.card,
+          title: Text(
+            expense == null ? 'Add Expense' : 'Edit Expense',
+            style: TextStyle(color: dialogCtx.ext.textPrimary, fontSize: 15, fontWeight: FontWeight.w700),
+          ),
+          content: SizedBox(
+            width: 300,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _dlgField('Name', nameCtrl, dialogCtx),
+                  const SizedBox(height: 10),
+                  _dlgField('Amount (₱)', amtCtrl, dialogCtx, type: TextInputType.number),
+                  const SizedBox(height: 10),
+                  _dlgField('Description', descCtrl, dialogCtx),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    value: cat,
+                    dropdownColor: dialogCtx.ext.card,
+                    style: TextStyle(color: dialogCtx.ext.textPrimary, fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Category',
+                      labelStyle: TextStyle(color: dialogCtx.ext.textSecondary),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    items: _tabs.map((c) => DropdownMenuItem(value: c, child: Text(c, style: const TextStyle(fontSize: 13)))).toList(),
+                    onChanged: (v) => setSt(() => cat = v!),
+                  ),
+                  const SizedBox(height: 10),
+                  GestureDetector(
+                    onTap: () async {
+                      final picked = await _showAppDatePicker(
+                        buildContext: dialogCtx,
+                        initialDate: date,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime(2030),
+                      );
+                      if (picked != null) setSt(() => date = picked);
+                    },
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(border: Border.all(color: dialogCtx.ext.border), borderRadius: BorderRadius.circular(8)),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.calendar_today, size: 14, color: AppColors.primary),
+                          const SizedBox(width: 8),
+                          Flexible(
+                            child: Text(
+                              '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}',
+                              style: TextStyle(fontSize: 13, color: dialogCtx.ext.textPrimary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogCtx), child: const Text('Cancel')),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+              onPressed: () async {
+                final name = nameCtrl.text.trim();
+                final amt = double.tryParse(amtCtrl.text) ?? 0;
+                if (name.isEmpty || amt <= 0) return;
+
+                final newExpense = Expense(
+                  id: expense?.id ?? '', // Use existing ID if editing, empty if adding (Supabase handles new ID)
+                  name: name,
+                  amount: amt,
+                  description: descCtrl.text.trim(),
+                  category: cat,
+                  date: date,
+                );
+
+                // Call async methods
+                if (expense == null) {
+                  await widget.state.addExpense(newExpense);
+                } else {
+                  await widget.state.updateExpense(newExpense);
+                }
+
+                if (mounted) setState(() {}); // Update UI
+                if (mounted) Navigator.pop(dialogCtx); // Close dialog
+              },
+              child: Text(expense == null ? 'Add' : 'Save', style: const TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Delete Confirmation Logic
+  void _deleteExpense(Expense expense) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: ctx.ext.card,
+        title: Text('Delete Expense', style: TextStyle(color: ctx.ext.textPrimary)),
+        content: Text('Are you sure you want to delete "${expense.name}"?', style: TextStyle(color: ctx.ext.textSecondary)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              await widget.state.deleteExpense(expense.id);
+              if (mounted) setState(() {});
+              if (mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _dlgField(String label, TextEditingController ctrl, BuildContext ctx, {TextInputType? type}) => TextField(
+        controller: ctrl,
+        keyboardType: type,
         style: TextStyle(color: ctx.ext.textPrimary, fontSize: 13),
         decoration: InputDecoration(
           labelText: label,
@@ -3609,86 +3704,158 @@ class _ExpensesPageState extends State<ExpensesPage> with SingleTickerProviderSt
     final ext = context.ext;
     return Padding(
       padding: const EdgeInsets.all(16),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(
-          alignment: WrapAlignment.spaceBetween,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 8, runSpacing: 8,
-          children: [
-            Text('Expenses', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: ext.textPrimary)),
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-              onPressed: () => _showAddExpense(_tabs[_tabCtrl.index]),
-              icon: const Icon(Icons.add, size: 16, color: Colors.white),
-              label: const Text('Add Expense', style: TextStyle(color: Colors.white, fontSize: 13)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            alignment: WrapAlignment.spaceBetween,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              Text('Expenses', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: ext.textPrimary)),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                onPressed: () => _showExpenseDialog(),
+                icon: const Icon(Icons.add, size: 16, color: Colors.white),
+                label: const Text('Add Expense', style: TextStyle(color: Colors.white, fontSize: 13)),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.primary.withOpacity(0.2)),
             ),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.08), borderRadius: BorderRadius.circular(12), border: Border.all(color: AppColors.primary.withOpacity(0.2))),
-          child: Row(children: [
-            const Icon(Icons.account_balance_wallet, color: AppColors.primary, size: 18),
-            const SizedBox(width: 8),
-            Flexible(child: Text('Total: ', style: TextStyle(color: ext.textSecondary, fontSize: 13))),
-            Text('₱${widget.state.totalExpenses.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 15)),
-          ]),
-        ),
-        const SizedBox(height: 12),
-        TabBar(
-          controller: _tabCtrl,
-          isScrollable: true,
-          labelColor: AppColors.primary,
-          unselectedLabelColor: ext.textSecondary,
-          indicatorColor: AppColors.primary,
-          labelStyle: const TextStyle(fontSize: 12),
-          tabs: const [Tab(text: 'Utilities'), Tab(text: 'Ingredients'), Tab(text: 'Personal'), Tab(text: 'Employee')],
-        ),
-        Expanded(
-          child: TabBarView(controller: _tabCtrl, children: _tabs.map((cat) {
-            final list = widget.state.expenses.where((e) => e.category == cat).toList();
-            if (list.isEmpty) return Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-              const Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey),
-              const SizedBox(height: 8),
-              Text('No $cat expenses yet', style: TextStyle(color: ext.textSecondary, fontSize: 13)),
-            ]));
-            return ListView.builder(
-              padding: const EdgeInsets.only(top: 10),
-              itemCount: list.length,
-              itemBuilder: (ctx, i) {
-                final e = list[i];
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: ext.card, borderRadius: BorderRadius.circular(12), border: Border.all(color: ext.border), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)]),
-                  child: Row(children: [
-                    Container(width: 38, height: 38, decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)), child: Center(child: Icon(_expenseIcon(cat), size: 18, color: AppColors.primary))),
-                    const SizedBox(width: 10),
-                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(e.name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ext.textPrimary), overflow: TextOverflow.ellipsis),
-                      if (e.description.isNotEmpty) Text(e.description, style: TextStyle(fontSize: 11, color: ext.textSecondary), overflow: TextOverflow.ellipsis),
-                      Text('${e.date.year}-${e.date.month.toString().padLeft(2,'0')}-${e.date.day.toString().padLeft(2,'0')}', style: TextStyle(fontSize: 10, color: ext.textSecondary)),
-                    ])),
-                    const SizedBox(width: 8),
-                    Text('₱${e.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.accent)),
-                  ]),
+            child: Row(
+              children: [
+                const Icon(Icons.account_balance_wallet, color: AppColors.primary, size: 18),
+                const SizedBox(width: 8),
+                Flexible(child: Text('Total: ', style: TextStyle(color: ext.textSecondary, fontSize: 13))),
+                Text('₱${widget.state.totalExpenses.toStringAsFixed(2)}', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w700, fontSize: 15)),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          TabBar(
+            controller: _tabCtrl,
+            isScrollable: true,
+            labelColor: AppColors.primary,
+            unselectedLabelColor: ext.textSecondary,
+            indicatorColor: AppColors.primary,
+            labelStyle: const TextStyle(fontSize: 12),
+            tabs: const [
+              Tab(text: 'Utilities'),
+              Tab(text: 'Ingredients'),
+              Tab(text: 'Personal'),
+              Tab(text: 'Employee'),
+            ],
+          ),
+          Expanded(
+            child: TabBarView(
+              controller: _tabCtrl,
+              children: _tabs.map((cat) {
+                final list = widget.state.expenses.where((e) => e.category == cat).toList();
+                if (list.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.receipt_long_outlined, size: 48, color: Colors.grey),
+                        const SizedBox(height: 8),
+                        Text('No $cat expenses yet', style: TextStyle(color: ext.textSecondary, fontSize: 13)),
+                      ],
+                    ),
+                  );
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.only(top: 10),
+                  itemCount: list.length,
+                  itemBuilder: (ctx, i) {
+                    final e = list[i];
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: ext.card,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: ext.border),
+                        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 6)],
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(color: AppColors.primary.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+                            child: Center(child: Icon(_expenseIcon(cat), size: 18, color: AppColors.primary)),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(e.name, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: ext.textPrimary), overflow: TextOverflow.ellipsis),
+                                if (e.description.isNotEmpty)
+                                  Text(e.description, style: TextStyle(fontSize: 11, color: ext.textSecondary), overflow: TextOverflow.ellipsis),
+                                Text(
+                                  '${e.date.year}-${e.date.month.toString().padLeft(2, '0')}-${e.date.day.toString().padLeft(2, '0')}',
+                                  style: TextStyle(fontSize: 10, color: ext.textSecondary),
+                                ),
+                              ],
+                            ),
+                          ),
+                          // Actions Column
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text('₱${e.amount.toStringAsFixed(2)}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppColors.accent)),
+                              const SizedBox(height: 4),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  InkWell(
+                                    onTap: () => _showExpenseDialog(expense: e),
+                                    child: Icon(Icons.edit, size: 16, color: Colors.blueGrey.withOpacity(0.8)),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  InkWell(
+                                    onTap: () => _deleteExpense(e),
+                                    child: Icon(Icons.delete, size: 16, color: Colors.red.withOpacity(0.8)),
+                                  ),
+                                ],
+                              )
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 );
-              },
-            );
-          }).toList()),
-        ),
-      ]),
+              }).toList(),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   IconData _expenseIcon(String cat) {
     switch (cat) {
-      case 'Utilities':    return Icons.bolt;
-      case 'Ingredients':  return Icons.shopping_basket;
-      case 'Personal':     return Icons.person;
-      case 'Employee':     return Icons.badge;
-      default:             return Icons.receipt;
+      case 'Utilities':
+        return Icons.bolt;
+      case 'Ingredients':
+        return Icons.shopping_basket;
+      case 'Personal':
+        return Icons.person;
+      case 'Employee':
+        return Icons.badge;
+      default:
+        return Icons.receipt;
     }
   }
 }
